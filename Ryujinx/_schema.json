@@ -15,6 +15,7 @@
     "logging_filtered_classes",
     "enable_file_log",
     "system_language",
+    "system_region",
     "docked_mode",
     "enable_vsync",
     "enable_multicore_scheduling",
@@ -400,6 +401,37 @@
       ],
       "examples": [
         "AmericanEnglish"
+      ]
+    },
+    "system_region": {
+      "$id": "#/properties/system_region",
+      "type": "string",
+      "title": "System Region",
+      "description": "Change System Region",
+      "default": "USA",
+      "enum": [
+        "Japan",
+        "USA",
+        "Europe",
+        "Australia",
+        "China",
+        "Korea",
+        "Taiwan"
+      ],
+      "examples": [
+        "USA"
+      ]
+    },
+    "system_time_offset": {
+      "$id": "#/properties/system_time_offset",
+      "type": "integer",
+      "title": "System Time Offset",
+      "description": "System time offset in seconds.",
+      "default": 0,
+      "examples": [
+        -3600,
+        0,
+        3600
       ]
     },
     "docked_mode": {
@@ -808,8 +840,8 @@
           "title": "Joystick Deadzone",
           "description": "Controller Analog Stick Deadzone",
           "default": 0.05,
-          "minimum": -32768.0,
-          "maximum": 32767.0,
+          "minimum": 0.00,
+          "maximum": 1.00,
           "examples": [
             0.05
           ]

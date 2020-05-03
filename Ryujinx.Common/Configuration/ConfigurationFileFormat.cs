@@ -1,22 +1,26 @@
-using JsonPrettyPrinterPlus;
-using Ryujinx.Common.Logging;
-using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Text;
-using Utf8Json;
-using Utf8Json.Resolvers;
-using Ryujinx.Configuration.System;
-using Ryujinx.Configuration.Hid;
 using Ryujinx.Common.Configuration.Hid;
-using Ryujinx.UI.Input;
+using Ryujinx.Common.Logging;
+using Ryujinx.Common.Utilities;
+using Ryujinx.Configuration.System;
 using Ryujinx.Configuration.Ui;
 
 namespace Ryujinx.Configuration
 {
     public class ConfigurationFileFormat
     {
+        /// <summary>
+        /// The current version of the file format
+        /// </summary>
+        public const int CurrentVersion = 6;
+
         public int Version { get; set; }
+
+        /// <summary>
+        /// Max Anisotropy. Values range from 0 - 16. Set to -1 to let the game decide.
+        /// </summary>
+        public float MaxAnisotropy { get; set; }
 
         /// <summary>
         /// Dumps shaders in this local directory
@@ -74,6 +78,21 @@ namespace Ryujinx.Configuration
         public Language SystemLanguage { get; set; }
 
         /// <summary>
+        /// Change System Region
+        /// </summary>
+        public Region SystemRegion { get; set; }
+
+        /// <summary>
+        /// Change System TimeZone
+        /// </summary>
+        public string SystemTimeZone { get; set; }
+
+        /// <summary>
+        /// Change System Time Offset in seconds
+        /// </summary>
+        public long SystemTimeOffset { get; set; }
+
+        /// <summary>
         /// Enables or disables Docked Mode
         /// </summary>
         public bool DockedMode { get; set; }
@@ -109,11 +128,6 @@ namespace Ryujinx.Configuration
         public bool IgnoreMissingServices { get; set; }
 
         /// <summary>
-        ///  The primary controller's type
-        /// </summary>
-        public ControllerType ControllerType { get; set; }
-
-        /// <summary>
         /// Used to toggle columns in the GUI
         /// </summary>
         public GuiColumns GuiColumns { get; set; }
@@ -141,12 +155,12 @@ namespace Ryujinx.Configuration
         /// <summary>
         /// Keyboard control bindings
         /// </summary>
-        public NpadKeyboard KeyboardControls { get; set; }
+        public List<KeyboardConfig> KeyboardConfig { get; set; }
 
         /// <summary>
         /// Controller control bindings
         /// </summary>
-        public NpadController JoystickControls { get; set; }
+        public List<ControllerConfig> ControllerConfig { get; set; }
 
         /// <summary>
         /// Loads a configuration file from disk
@@ -154,15 +168,7 @@ namespace Ryujinx.Configuration
         /// <param name="path">The path to the JSON configuration file</param>
         public static ConfigurationFileFormat Load(string path)
         {
-            var resolver = CompositeResolver.Create(
-                new[] { new ConfigurationEnumFormatter<Key>() },
-                new[] { StandardResolver.AllowPrivateSnakeCase }
-            );
-
-            using (Stream stream = File.OpenRead(path))
-            {
-                return JsonSerializer.Deserialize<ConfigurationFileFormat>(stream, resolver);
-            }
+            return JsonHelper.DeserializeFromFile<ConfigurationFileFormat>(path);
         }
 
         /// <summary>
@@ -171,41 +177,7 @@ namespace Ryujinx.Configuration
         /// <param name="path">The path to the JSON configuration file</param>
         public void SaveConfig(string path)
         {
-            IJsonFormatterResolver resolver = CompositeResolver.Create(
-                new[] { new ConfigurationEnumFormatter<Key>()  },
-                new[] { StandardResolver.AllowPrivateSnakeCase }
-            );
-
-            byte[] data = JsonSerializer.Serialize(this, resolver);
-            File.WriteAllText(path, Encoding.UTF8.GetString(data, 0, data.Length).PrettyPrintJson());
-        }
-
-        private class ConfigurationEnumFormatter<T> : IJsonFormatter<T>
-            where T : struct
-        {
-            public void Serialize(ref JsonWriter writer, T value, IJsonFormatterResolver formatterResolver)
-            {
-                formatterResolver.GetFormatterWithVerify<string>()
-                                 .Serialize(ref writer, value.ToString(), formatterResolver);
-            }
-
-            public T Deserialize(ref JsonReader reader, IJsonFormatterResolver formatterResolver)
-            {
-                if (reader.ReadIsNull())
-                {
-                    return default(T);
-                }
-
-                string enumName = formatterResolver.GetFormatterWithVerify<string>()
-                                                   .Deserialize(ref reader, formatterResolver);
-
-                if (Enum.TryParse<T>(enumName, out T result))
-                {
-                    return result;
-                }
-
-                return default(T);
-            }
+            File.WriteAllText(path, JsonHelper.Serialize(this, true));
         }
     }
 }

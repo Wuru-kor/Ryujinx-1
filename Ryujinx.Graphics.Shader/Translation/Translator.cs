@@ -55,8 +55,11 @@ namespace Ryujinx.Graphics.Shader.Translation
                 program.SBufferDescriptors,
                 program.TextureDescriptors,
                 program.ImageDescriptors,
+
                 sInfo.InterpolationQualifiers,
                 config.Stage,
+
+
                 sInfo.UsesInstanceId);
 
             return new ShaderProgram(spInfo, program.Code);

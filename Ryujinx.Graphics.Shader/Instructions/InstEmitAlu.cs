@@ -200,10 +200,27 @@ namespace Ryujinx.Graphics.Shader.Instructions
             // TODO: CC, X, corner cases
         }
 
+        public static void Icmp(EmitterContext context)
+        {
+            OpCode op = context.CurrOp;
+
+            bool isSigned = op.RawOpCode.Extract(48);
+
+            IntegerCondition cmpOp = (IntegerCondition)op.RawOpCode.Extract(49, 3);
+
+            Operand srcA = GetSrcA(context);
+            Operand srcB = GetSrcB(context);
+            Operand srcC = GetSrcC(context);
+
+            Operand cmpRes = GetIntComparison(context, cmpOp, srcC, Const(0), isSigned);
+
+            Operand res = context.ConditionalSelect(cmpRes, srcA, srcB);
+
+            context.Copy(GetDest(context), res);
+        }
+
         public static void Imad(EmitterContext context)
         {
-            OpCodeAlu op = (OpCodeAlu)context.CurrOp;
-
             bool signedA = context.CurrOp.RawOpCode.Extract(48);
             bool signedB = context.CurrOp.RawOpCode.Extract(53);
             bool high    = context.CurrOp.RawOpCode.Extract(54);
@@ -581,24 +598,23 @@ namespace Ryujinx.Graphics.Shader.Instructions
             bool signedA = context.CurrOp.RawOpCode.Extract(48);
             bool signedB = context.CurrOp.RawOpCode.Extract(49);
             bool highA   = context.CurrOp.RawOpCode.Extract(53);
-            bool highB   = false;
 
-            XmadCMode mode;
+            bool isReg = (op is OpCodeAluReg) && !(op is OpCodeAluRegCbuf);
+            bool isImm = (op is OpCodeAluImm);
 
-            if (op is OpCodeAluReg)
+            XmadCMode mode = isReg || isImm
+                ? (XmadCMode)context.CurrOp.RawOpCode.Extract(50, 3)
+                : (XmadCMode)context.CurrOp.RawOpCode.Extract(50, 2);
+
+            bool highB = false;
+
+            if (isReg)
             {
                 highB = context.CurrOp.RawOpCode.Extract(35);
-
-                mode = (XmadCMode)context.CurrOp.RawOpCode.Extract(50, 3);
             }
-            else
+            else if (!isImm)
             {
-                mode = (XmadCMode)context.CurrOp.RawOpCode.Extract(50, 2);
-
-                if (!(op is OpCodeAluImm))
-                {
-                    highB = context.CurrOp.RawOpCode.Extract(52);
-                }
+                highB = context.CurrOp.RawOpCode.Extract(52);
             }
 
             Operand srcA = GetSrcA(context);
@@ -731,19 +747,16 @@ namespace Ryujinx.Graphics.Shader.Instructions
             }
             else
             {
-                Instruction inst;
-
-                switch (cond)
+                var inst = cond switch
                 {
-                    case IntegerCondition.Less:           inst = Instruction.CompareLessU32;           break;
-                    case IntegerCondition.Equal:          inst = Instruction.CompareEqual;             break;
-                    case IntegerCondition.LessOrEqual:    inst = Instruction.CompareLessOrEqualU32;    break;
-                    case IntegerCondition.Greater:        inst = Instruction.CompareGreaterU32;        break;
-                    case IntegerCondition.NotEqual:       inst = Instruction.CompareNotEqual;          break;
-                    case IntegerCondition.GreaterOrEqual: inst = Instruction.CompareGreaterOrEqualU32; break;
-
-                    default: throw new InvalidOperationException($"Unexpected condition \"{cond}\".");
-                }
+                    IntegerCondition.Less => Instruction.CompareLessU32,
+                    IntegerCondition.Equal => Instruction.CompareEqual,
+                    IntegerCondition.LessOrEqual => Instruction.CompareLessOrEqualU32,
+                    IntegerCondition.Greater => Instruction.CompareGreaterU32,
+                    IntegerCondition.NotEqual => Instruction.CompareNotEqual,
+                    IntegerCondition.GreaterOrEqual => Instruction.CompareGreaterOrEqualU32,
+                    _ => throw new InvalidOperationException($"Unexpected condition \"{cond}\".")
+                };
 
                 if (isSigned)
                 {

@@ -45,7 +45,7 @@ namespace Ryujinx.Graphics.Gpu
             BitwiseNotAnd      = 12
         }
 
-        public Queue<int> Fifo { get; private set; }
+        public Queue<int> Fifo { get; }
 
         private int[] _gprs;
 
@@ -61,6 +61,8 @@ namespace Ryujinx.Graphics.Gpu
         private bool _ignoreExitFlag;
 
         private int _pc;
+
+        private ShadowRamControl _shadowCtrl;
 
         /// <summary>
         /// Creates a new instance of the macro code interpreter.
@@ -78,14 +80,17 @@ namespace Ryujinx.Graphics.Gpu
         /// <param name="mme">Code of the program to execute</param>
         /// <param name="position">Start position to execute</param>
         /// <param name="param">Optional argument passed to the program, 0 if not used</param>
+        /// <param name="shadowCtrl">Shadow RAM control register value</param>
         /// <param name="state">Current GPU state</param>
-        public void Execute(int[] mme, int position, int param, GpuState state)
+        public void Execute(int[] mme, int position, int param, ShadowRamControl shadowCtrl, GpuState state)
         {
             Reset();
 
             _gprs[1] = param;
 
             _pc = position;
+
+            _shadowCtrl = shadowCtrl;
 
             FetchOpCode(mme);
 
@@ -487,7 +492,7 @@ namespace Ryujinx.Graphics.Gpu
         {
             MethodParams meth = new MethodParams(_methAddr, value);
 
-            state.CallMethod(meth);
+            state.CallMethod(meth, _shadowCtrl);
 
             _methAddr += _methIncr;
         }

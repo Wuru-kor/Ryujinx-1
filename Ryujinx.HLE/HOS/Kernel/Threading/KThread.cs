@@ -66,7 +66,9 @@ namespace Ryujinx.HLE.HOS.Kernel.Threading
 
         private long _affinityMaskOverride;
         private int  _preferredCoreOverride;
+#pragma warning disable CS0649
         private int  _affinityOverrideCount;
+#pragma warning restore CS0649
 
         public ThreadSchedState SchedFlags { get; private set; }
 
@@ -1141,9 +1143,9 @@ namespace Ryujinx.HLE.HOS.Kernel.Threading
         {
             Owner.Translator.Execute(Context, entrypoint);
 
-            Context.Dispose();
-
             ThreadExit();
+
+            Context.Dispose();
         }
 
         private void ThreadExit()

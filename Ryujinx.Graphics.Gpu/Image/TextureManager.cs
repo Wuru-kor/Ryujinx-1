@@ -37,6 +37,7 @@ namespace Ryujinx.Graphics.Gpu.Image
         private readonly AutoDeleteCache _cache;
 
         private readonly HashSet<Texture> _modified;
+        private readonly HashSet<Texture> _modifiedLinear;
 
         /// <summary>
         /// Constructs a new instance of the texture manager.
@@ -62,6 +63,7 @@ namespace Ryujinx.Graphics.Gpu.Image
             _cache = new AutoDeleteCache();
 
             _modified = new HashSet<Texture>(new ReferenceEqualityComparer<Texture>());
+            _modifiedLinear = new HashSet<Texture>(new ReferenceEqualityComparer<Texture>());
         }
 
         /// <summary>
@@ -203,6 +205,17 @@ namespace Ryujinx.Graphics.Gpu.Image
             _gpBindingsManager.CommitBindings();
 
             UpdateRenderTargets();
+        }
+
+        /// <summary>
+        /// Gets a texture descriptor used on the compute pipeline.
+        /// </summary>
+        /// <param name="state">Current GPU state</param>
+        /// <param name="handle">Shader "fake" handle of the texture</param>
+        /// <returns>The texture descriptor</returns>
+        public TextureDescriptor GetComputeTextureDescriptor(GpuState state, int handle)
+        {
+            return _cpBindingsManager.GetTextureDescriptor(state, 0, handle);
         }
 
         /// <summary>
@@ -476,7 +489,11 @@ namespace Ryujinx.Graphics.Gpu.Image
             // Calculate texture sizes, used to find all overlapping textures.
             SizeInfo sizeInfo;
 
-            if (info.IsLinear)
+            if (info.Target == Target.TextureBuffer)
+            {
+                sizeInfo = new SizeInfo(info.Width * info.FormatInfo.BytesPerPixel);
+            }
+            else if (info.IsLinear)
             {
                 sizeInfo = SizeCalculator.GetLinearTextureSize(
                     info.Stride,
@@ -519,6 +536,11 @@ namespace Ryujinx.Graphics.Gpu.Image
 
                     texture = overlap.CreateView(info, sizeInfo, firstLayer, firstLevel);
 
+                    if (IsTextureModified(overlap))
+                    {
+                        CacheTextureModified(texture);
+                    }
+
                     // The size only matters (and is only really reliable) when the
                     // texture is used on a sampler, because otherwise the size will be
                     // aligned.
@@ -554,6 +576,13 @@ namespace Ryujinx.Graphics.Gpu.Image
 
                         overlap.HostTexture.CopyTo(newView, 0, 0);
 
+                        // Inherit modification from overlapping texture, do that before replacing
+                        // the view since the replacement operation removes it from the list.
+                        if (IsTextureModified(overlap))
+                        {
+                            CacheTextureModified(texture);
+                        }
+
                         overlap.ReplaceView(texture, overlapInfo, newView);
                     }
                 }
@@ -574,6 +603,11 @@ namespace Ryujinx.Graphics.Gpu.Image
                             out int firstLevel))
                         {
                             overlap.HostTexture.CopyTo(texture.HostTexture, firstLayer, firstLevel);
+
+                            if (IsTextureModified(overlap))
+                            {
+                                CacheTextureModified(texture);
+                            }
                         }
                     }
                 }
@@ -596,12 +630,27 @@ namespace Ryujinx.Graphics.Gpu.Image
         }
 
         /// <summary>
+        /// Checks if a texture was modified by the host GPU.
+        /// </summary>
+        /// <param name="texture">Texture to be checked</param>
+        /// <returns>True if the texture was modified by the host GPU, false otherwise</returns>
+        public bool IsTextureModified(Texture texture)
+        {
+            return _modified.Contains(texture);
+        }
+
+        /// <summary>
         /// Signaled when a cache texture is modified, and adds it to a set to be enumerated when flushing textures.
         /// </summary>
         /// <param name="texture">The texture that was modified.</param>
         private void CacheTextureModified(Texture texture)
         {
             _modified.Add(texture);
+
+            if (texture.Info.IsLinear)
+            {
+                _modifiedLinear.Add(texture);
+            }
         }
 
         /// <summary>
@@ -611,6 +660,11 @@ namespace Ryujinx.Graphics.Gpu.Image
         private void CacheTextureDisposed(Texture texture)
         {
             _modified.Remove(texture);
+
+            if (texture.Info.IsLinear)
+            {
+                _modifiedLinear.Remove(texture);
+            }
         }
 
         /// <summary>
@@ -747,14 +801,12 @@ namespace Ryujinx.Graphics.Gpu.Image
         /// </summary>
         public void Flush()
         {
-            foreach (Texture texture in _modified)
+            foreach (Texture texture in _modifiedLinear)
             {
-                if (texture.Info.IsLinear)
-                {
-                    texture.Flush();
-                }
+                texture.Flush();
             }
-            _modified.Clear();
+
+            _modifiedLinear.Clear();
         }
 
         /// <summary>
@@ -771,7 +823,6 @@ namespace Ryujinx.Graphics.Gpu.Image
                     texture.Flush();
                 }
             }
-            _modified.Clear();
         }
 
         /// <summary>

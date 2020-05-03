@@ -78,6 +78,7 @@ namespace Ryujinx.Graphics.Gpu.Shader
         /// <remarks>
         /// This automatically translates, compiles and adds the code to the cache if not present.
         /// </remarks>
+        /// <param name="state">Current GPU state</param>
         /// <param name="gpuVa">GPU virtual address of the binary shader code</param>
         /// <param name="localSizeX">Local group size X of the computer shader</param>
         /// <param name="localSizeY">Local group size Y of the computer shader</param>
@@ -85,7 +86,12 @@ namespace Ryujinx.Graphics.Gpu.Shader
         /// <param name="localMemorySize">Local memory size of the compute shader</param>
         /// <param name="sharedMemorySize">Shared memory size of the compute shader</param>
         /// <returns>Compiled compute shader code</returns>
+
         public Shader GetComputeShader(
+
+        public ComputeShader GetComputeShader(
+            GpuState state,
+
             ulong gpuVa,
             int localSizeX,
             int localSizeY,
@@ -126,7 +132,18 @@ namespace Ryujinx.Graphics.Gpu.Shader
                 };
             }
 
+
             TranslatorCallbacks callbacks = new TranslatorCallbacks(QueryInfo, PrintLog);
+
+            CachedShader shader = TranslateComputeShader(
+                state,
+                gpuVa,
+                localSizeX,
+                localSizeY,
+                localSizeZ,
+                localMemorySize,
+                sharedMemorySize);
+
 
             ShaderProgram program = Translator.Translate(code, callbacks, DefaultFlags | TranslationFlags.Compute);
 
@@ -183,7 +200,18 @@ namespace Ryujinx.Graphics.Gpu.Shader
                 pack.Add(GetShaderCode(addresses.TessEvaluation));
             }
 
+
             if (addresses.Geometry != 0)
+
+            gpShaders.Shaders[1] = TranslateGraphicsShader(state, ShaderStage.TessellationControl,    addresses.TessControl);
+            gpShaders.Shaders[2] = TranslateGraphicsShader(state, ShaderStage.TessellationEvaluation, addresses.TessEvaluation);
+            gpShaders.Shaders[3] = TranslateGraphicsShader(state, ShaderStage.Geometry,               addresses.Geometry);
+            gpShaders.Shaders[4] = TranslateGraphicsShader(state, ShaderStage.Fragment,               addresses.Fragment);
+
+            List<IShader> hostShaders = new List<IShader>();
+
+            for (int stage = 0; stage < gpShaders.Shaders.Length; stage++)
+
             {
                 pack.Add(GetShaderCode(addresses.Geometry));
             }
@@ -212,7 +240,34 @@ namespace Ryujinx.Graphics.Gpu.Shader
 
             IShader[] shaders = new IShader[programs.Count(x => x != null)];
 
+
             int index = 0;
+
+        /// <summary>
+        /// Translates the binary Maxwell shader code to something that the host API accepts.
+        /// </summary>
+        /// <param name="state">Current GPU state</param>
+        /// <param name="gpuVa">GPU virtual address of the binary shader code</param>
+        /// <param name="localSizeX">Local group size X of the computer shader</param>
+        /// <param name="localSizeY">Local group size Y of the computer shader</param>
+        /// <param name="localSizeZ">Local group size Z of the computer shader</param>
+        /// <param name="localMemorySize">Local memory size of the compute shader</param>
+        /// <param name="sharedMemorySize">Shared memory size of the compute shader</param>
+        /// <returns>Compiled compute shader code</returns>
+        private CachedShader TranslateComputeShader(
+            GpuState state,
+            ulong gpuVa,
+            int localSizeX,
+            int localSizeY,
+            int localSizeZ,
+            int localMemorySize,
+            int sharedMemorySize)
+        {
+            if (gpuVa == 0)
+            {
+                return null;
+            }
+
 
             for (int stage = 0; stage < programs.Length; stage++)
             {
@@ -220,8 +275,30 @@ namespace Ryujinx.Graphics.Gpu.Shader
 
                 if (program != null)
                 {
+
                     shaders[index++] = _context.Renderer.CompileShader(program);
                 }
+
+                    QueryInfoName.ComputeLocalSizeX
+                        => localSizeX,
+                    QueryInfoName.ComputeLocalSizeY
+                        => localSizeY,
+                    QueryInfoName.ComputeLocalSizeZ
+                        => localSizeZ,
+                    QueryInfoName.ComputeLocalMemorySize
+                        => localMemorySize,
+                    QueryInfoName.ComputeSharedMemorySize
+                        => sharedMemorySize,
+                    QueryInfoName.IsTextureBuffer
+                        => Convert.ToInt32(QueryIsTextureBuffer(state, 0, index, compute: true)),
+                    QueryInfoName.IsTextureRectangle
+                        => Convert.ToInt32(QueryIsTextureRectangle(state, 0, index, compute: true)),
+                    QueryInfoName.TextureFormat
+                        => (int)QueryTextureFormat(state, 0, index, compute: true),
+                    _
+                        => QueryInfoCommon(info)
+                };
+
             }
 
             IProgram hostProgram = _context.Renderer.CreateProgram(shaders);
@@ -261,10 +338,16 @@ namespace Ryujinx.Graphics.Gpu.Shader
             {
                 return info switch
                 {
-                    QueryInfoName.IsTextureBuffer => Convert.ToInt32(QueryIsTextureBuffer(state, (int)stage - 1, index)),
-                    QueryInfoName.IsTextureRectangle => Convert.ToInt32(QueryIsTextureRectangle(state, (int)stage - 1, index)),
-                    QueryInfoName.PrimitiveTopology => (int)GetPrimitiveTopology(),
-                    _ => QueryInfoCommon(info)
+                    QueryInfoName.IsTextureBuffer
+                        => Convert.ToInt32(QueryIsTextureBuffer(state, (int)stage - 1, index, compute: false)),
+                    QueryInfoName.IsTextureRectangle
+                        => Convert.ToInt32(QueryIsTextureRectangle(state, (int)stage - 1, index, compute: false)),
+                    QueryInfoName.PrimitiveTopology
+                        => (int)QueryPrimitiveTopology(),
+                    QueryInfoName.TextureFormat
+                        => (int)QueryTextureFormat(state, (int)stage - 1, index, compute: false),
+                    _
+                        => QueryInfoCommon(info)
                 };
             }
 
@@ -347,6 +430,7 @@ namespace Ryujinx.Graphics.Gpu.Shader
         }
 
         /// <summary>
+
         /// Performs backwards propagation of interpolation qualifiers or later shader stages input,
         /// to ealier shader stages output.
         /// This is required by older versions of OpenGL (pre-4.3).
@@ -386,11 +470,13 @@ namespace Ryujinx.Graphics.Gpu.Shader
         }
 
         /// <summary>
+
+
         /// Gets the primitive topology for the current draw.
         /// This is required by geometry shaders.
         /// </summary>
         /// <returns>Primitive topology</returns>
-        private InputTopology GetPrimitiveTopology()
+        private InputTopology QueryPrimitiveTopology()
         {
             switch (_context.Methods.PrimitiveType)
             {
@@ -422,11 +508,12 @@ namespace Ryujinx.Graphics.Gpu.Shader
         /// </summary>
         /// <param name="state">Current GPU state</param>
         /// <param name="stageIndex">Index of the shader stage</param>
-        /// <param name="index">Index of the texture (this is the shader "fake" handle)</param>
+        /// <param name="handle">Index of the texture (this is the shader "fake" handle)</param>
+        /// <param name="compute">Indicates whenever the texture descriptor is for the compute or graphics engine</param>
         /// <returns>True if the texture is a buffer texture, false otherwise</returns>
-        private bool QueryIsTextureBuffer(GpuState state, int stageIndex, int index)
+        private bool QueryIsTextureBuffer(GpuState state, int stageIndex, int handle, bool compute)
         {
-            return GetTextureDescriptor(state, stageIndex, index).UnpackTextureTarget() == TextureTarget.TextureBuffer;
+            return GetTextureDescriptor(state, stageIndex, handle, compute).UnpackTextureTarget() == TextureTarget.TextureBuffer;
         }
 
         /// <summary>
@@ -436,11 +523,12 @@ namespace Ryujinx.Graphics.Gpu.Shader
         /// </summary>
         /// <param name="state">Current GPU state</param>
         /// <param name="stageIndex">Index of the shader stage</param>
-        /// <param name="index">Index of the texture (this is the shader "fake" handle)</param>
+        /// <param name="handle">Index of the texture (this is the shader "fake" handle)</param>
+        /// <param name="compute">Indicates whenever the texture descriptor is for the compute or graphics engine</param>
         /// <returns>True if the texture is a rectangle texture, false otherwise</returns>
-        private bool QueryIsTextureRectangle(GpuState state, int stageIndex, int index)
+        private bool QueryIsTextureRectangle(GpuState state, int stageIndex, int handle, bool compute)
         {
-            var descriptor = GetTextureDescriptor(state, stageIndex, index);
+            var descriptor = GetTextureDescriptor(state, stageIndex, handle, compute);
 
             TextureTarget target = descriptor.UnpackTextureTarget();
 
@@ -450,15 +538,93 @@ namespace Ryujinx.Graphics.Gpu.Shader
         }
 
         /// <summary>
+        /// Queries the format of a given texture.
+        /// </summary>
+        /// <param name="state">Current GPU state</param>
+        /// <param name="stageIndex">Index of the shader stage. This is ignored if <paramref name="compute"/> is true</param>
+        /// <param name="handle">Index of the texture (this is the shader "fake" handle)</param>
+        /// <param name="compute">Indicates whenever the texture descriptor is for the compute or graphics engine</param>
+        /// <returns>The texture format</returns>
+        private TextureFormat QueryTextureFormat(GpuState state, int stageIndex, int handle, bool compute)
+        {
+            return QueryTextureFormat(GetTextureDescriptor(state, stageIndex, handle, compute));
+        }
+
+        /// <summary>
+        /// Queries the format of a given texture.
+        /// </summary>
+        /// <param name="descriptor">Descriptor of the texture from the texture pool</param>
+        /// <returns>The texture format</returns>
+        private static TextureFormat QueryTextureFormat(TextureDescriptor descriptor)
+        {
+            if (!FormatTable.TryGetTextureFormat(descriptor.UnpackFormat(), descriptor.UnpackSrgb(), out FormatInfo formatInfo))
+            {
+                return TextureFormat.Unknown;
+            }
+
+            return formatInfo.Format switch
+            {
+                Format.R8Unorm           => TextureFormat.R8Unorm,
+                Format.R8Snorm           => TextureFormat.R8Snorm,
+                Format.R8Uint            => TextureFormat.R8Uint,
+                Format.R8Sint            => TextureFormat.R8Sint,
+                Format.R16Float          => TextureFormat.R16Float,
+                Format.R16Unorm          => TextureFormat.R16Unorm,
+                Format.R16Snorm          => TextureFormat.R16Snorm,
+                Format.R16Uint           => TextureFormat.R16Uint,
+                Format.R16Sint           => TextureFormat.R16Sint,
+                Format.R32Float          => TextureFormat.R32Float,
+                Format.R32Uint           => TextureFormat.R32Uint,
+                Format.R32Sint           => TextureFormat.R32Sint,
+                Format.R8G8Unorm         => TextureFormat.R8G8Unorm,
+                Format.R8G8Snorm         => TextureFormat.R8G8Snorm,
+                Format.R8G8Uint          => TextureFormat.R8G8Uint,
+                Format.R8G8Sint          => TextureFormat.R8G8Sint,
+                Format.R16G16Float       => TextureFormat.R16G16Float,
+                Format.R16G16Unorm       => TextureFormat.R16G16Unorm,
+                Format.R16G16Snorm       => TextureFormat.R16G16Snorm,
+                Format.R16G16Uint        => TextureFormat.R16G16Uint,
+                Format.R16G16Sint        => TextureFormat.R16G16Sint,
+                Format.R32G32Float       => TextureFormat.R32G32Float,
+                Format.R32G32Uint        => TextureFormat.R32G32Uint,
+                Format.R32G32Sint        => TextureFormat.R32G32Sint,
+                Format.R8G8B8A8Unorm     => TextureFormat.R8G8B8A8Unorm,
+                Format.R8G8B8A8Snorm     => TextureFormat.R8G8B8A8Snorm,
+                Format.R8G8B8A8Uint      => TextureFormat.R8G8B8A8Uint,
+                Format.R8G8B8A8Sint      => TextureFormat.R8G8B8A8Sint,
+                Format.R16G16B16A16Float => TextureFormat.R16G16B16A16Float,
+                Format.R16G16B16A16Unorm => TextureFormat.R16G16B16A16Unorm,
+                Format.R16G16B16A16Snorm => TextureFormat.R16G16B16A16Snorm,
+                Format.R16G16B16A16Uint  => TextureFormat.R16G16B16A16Uint,
+                Format.R16G16B16A16Sint  => TextureFormat.R16G16B16A16Sint,
+                Format.R32G32B32A32Float => TextureFormat.R32G32B32A32Float,
+                Format.R32G32B32A32Uint  => TextureFormat.R32G32B32A32Uint,
+                Format.R32G32B32A32Sint  => TextureFormat.R32G32B32A32Sint,
+                Format.R10G10B10A2Unorm  => TextureFormat.R10G10B10A2Unorm,
+                Format.R10G10B10A2Uint   => TextureFormat.R10G10B10A2Uint,
+                Format.R11G11B10Float    => TextureFormat.R11G11B10Float,
+                _                        => TextureFormat.Unknown
+            };
+        }
+
+        /// <summary>
         /// Gets the texture descriptor for a given texture on the pool.
         /// </summary>
         /// <param name="state">Current GPU state</param>
-        /// <param name="stageIndex">Index of the shader stage</param>
-        /// <param name="index">Index of the texture (this is the shader "fake" handle)</param>
+        /// <param name="stageIndex">Index of the shader stage. This is ignored if <paramref name="compute"/> is true</param>
+        /// <param name="handle">Index of the texture (this is the shader "fake" handle)</param>
+        /// <param name="compute">Indicates whenever the texture descriptor is for the compute or graphics engine</param>
         /// <returns>Texture descriptor</returns>
-        private TextureDescriptor GetTextureDescriptor(GpuState state, int stageIndex, int index)
+        private TextureDescriptor GetTextureDescriptor(GpuState state, int stageIndex, int handle, bool compute)
         {
-            return _context.Methods.TextureManager.GetGraphicsTextureDescriptor(state, stageIndex, index);
+            if (compute)
+            {
+                return _context.Methods.TextureManager.GetComputeTextureDescriptor(state, handle);
+            }
+            else
+            {
+                return _context.Methods.TextureManager.GetGraphicsTextureDescriptor(state, stageIndex, handle);
+            }
         }
 
         /// <summary>
@@ -470,9 +636,12 @@ namespace Ryujinx.Graphics.Gpu.Shader
         {
             return info switch
             {
-                QueryInfoName.StorageBufferOffsetAlignment => _context.Capabilities.StorageBufferOffsetAlignment,
-                QueryInfoName.SupportsNonConstantTextureOffset => Convert.ToInt32(_context.Capabilities.SupportsNonConstantTextureOffset),
-                _ => 0
+                QueryInfoName.StorageBufferOffsetAlignment
+                    => _context.Capabilities.StorageBufferOffsetAlignment,
+                QueryInfoName.SupportsNonConstantTextureOffset
+                    => Convert.ToInt32(_context.Capabilities.SupportsNonConstantTextureOffset),
+                _
+                    => 0
             };
         }
 

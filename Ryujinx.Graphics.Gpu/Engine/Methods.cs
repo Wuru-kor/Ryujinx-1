@@ -54,6 +54,8 @@ namespace Ryujinx.Graphics.Gpu.Engine
 
             BufferManager  = new BufferManager(context);
             TextureManager = new TextureManager(context);
+
+            context.MemoryManager.MemoryUnmapped += _counterCache.MemoryUnmappedHandler;
         }
 
         /// <summary>
@@ -66,6 +68,8 @@ namespace Ryujinx.Graphics.Gpu.Engine
             state.RegisterCallback(MethodOffset.LoadInlineData, LoadInlineData);
 
             state.RegisterCallback(MethodOffset.Dispatch, Dispatch);
+
+            state.RegisterCallback(MethodOffset.SyncpointAction, IncrementSyncpoint);
 
             state.RegisterCallback(MethodOffset.CopyBuffer,  CopyBuffer);
             state.RegisterCallback(MethodOffset.CopyTexture, CopyTexture);
@@ -97,6 +101,19 @@ namespace Ryujinx.Graphics.Gpu.Engine
         }
 
         /// <summary>
+        /// Register callback for Fifo method calls that triggers an action on the GPFIFO.
+        /// </summary>
+        /// <param name="state">GPU state where the triggers will be registered</param>
+        public void RegisterCallbacksForFifo(GpuState state)
+        {
+            state.RegisterCallback(MethodOffset.FenceAction,            FenceAction);
+            state.RegisterCallback(MethodOffset.WaitForIdle,            WaitForIdle);
+            state.RegisterCallback(MethodOffset.SendMacroCodeData,      SendMacroCodeData);
+            state.RegisterCallback(MethodOffset.BindMacro,              BindMacro);
+            state.RegisterCallback(MethodOffset.SetMmeShadowRamControl, SetMmeShadowRamControl);
+        }
+
+        /// <summary>
         /// Updates host state based on the current guest GPU state.
         /// </summary>
         /// <param name="state">Guest GPU state</param>
@@ -110,6 +127,11 @@ namespace Ryujinx.Graphics.Gpu.Engine
                 UpdateShaderState(state);
             }
 
+            if (state.QueryModified(MethodOffset.RasterizeEnable))
+            {
+                UpdateRasterizerState(state);
+            }
+
             if (state.QueryModified(MethodOffset.RtColorState,
                                     MethodOffset.RtDepthStencilState,
                                     MethodOffset.RtControl,
@@ -119,6 +141,16 @@ namespace Ryujinx.Graphics.Gpu.Engine
                 UpdateRenderTargetState(state, useControl: true);
             }
 
+            if (state.QueryModified(MethodOffset.ScissorState))
+            {
+                UpdateScissorState(state);
+            }
+
+            if (state.QueryModified(MethodOffset.ViewVolumeClipControl))
+            {
+                UpdateDepthClampState(state);
+            }
+
             if (state.QueryModified(MethodOffset.DepthTestEnable,
                                     MethodOffset.DepthWriteEnable,
                                     MethodOffset.DepthTestFunc))
@@ -126,7 +158,9 @@ namespace Ryujinx.Graphics.Gpu.Engine
                 UpdateDepthTestState(state);
             }
 
-            if (state.QueryModified(MethodOffset.DepthMode, MethodOffset.ViewportTransform, MethodOffset.ViewportExtents))
+            if (state.QueryModified(MethodOffset.DepthMode,
+                                    MethodOffset.ViewportTransform,
+                                    MethodOffset.ViewportExtents))
             {
                 UpdateViewportTransform(state);
             }
@@ -197,6 +231,7 @@ namespace Ryujinx.Graphics.Gpu.Engine
             }
 
             if (state.QueryModified(MethodOffset.BlendIndependent,
+                                    MethodOffset.BlendConstant,
                                     MethodOffset.BlendStateCommon,
                                     MethodOffset.BlendEnableCommon,
                                     MethodOffset.BlendEnable,
@@ -209,6 +244,16 @@ namespace Ryujinx.Graphics.Gpu.Engine
         }
 
         /// <summary>
+        /// Updates Rasterizer primitive discard state based on guest gpu state.
+        /// </summary>
+        /// <param name="state">Current GPU state</param>
+        private void UpdateRasterizerState(GpuState state)
+        {
+            Boolean32 enable = state.Get<Boolean32>(MethodOffset.RasterizeEnable);
+            _context.Renderer.Pipeline.SetRasterizerDiscard(!enable);
+        }
+
+        /// <summary>
         /// Ensures that the bindings are visible to the host GPU.
         /// Note: this actually performs the binding using the host graphics API.
         /// </summary>
@@ -216,7 +261,7 @@ namespace Ryujinx.Graphics.Gpu.Engine
         {
             UpdateStorageBuffers();
 
-            BufferManager.CommitBindings();
+            BufferManager.CommitGraphicsBindings();
             TextureManager.CommitGraphicsBindings();
         }
 
@@ -324,6 +369,37 @@ namespace Ryujinx.Graphics.Gpu.Engine
         }
 
         /// <summary>
+        /// Updates host scissor test state based on current GPU state.
+        /// </summary>
+        /// <param name="state">Current GPU state</param>
+        private void UpdateScissorState(GpuState state)
+        {
+            for (int index = 0; index < Constants.TotalViewports; index++)
+            {
+                ScissorState scissor = state.Get<ScissorState>(MethodOffset.ScissorState, index);
+
+                bool enable = scissor.Enable && (scissor.X1 != 0 || scissor.Y1 != 0 || scissor.X2 != 0xffff || scissor.Y2 != 0xffff);
+
+                _context.Renderer.Pipeline.SetScissorEnable(index, enable);
+
+                if (enable)
+                {
+                    _context.Renderer.Pipeline.SetScissor(index, scissor.X1, scissor.Y1, scissor.X2 - scissor.X1, scissor.Y2 - scissor.Y1);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Updates host depth clamp state based on current GPU state.
+        /// </summary>
+        /// <param name="state">Current GPU state</param>
+        private void UpdateDepthClampState(GpuState state)
+        {
+            ViewVolumeClipControl clip = state.Get<ViewVolumeClipControl>(MethodOffset.ViewVolumeClipControl);
+            _context.Renderer.Pipeline.SetDepthClamp((clip & ViewVolumeClipControl.DepthClampDisabled) == 0);
+        }
+
+        /// <summary>
         /// Updates host depth test state based on current GPU state.
         /// </summary>
         /// <param name="state">Current GPU state</param>
@@ -345,8 +421,7 @@ namespace Ryujinx.Graphics.Gpu.Engine
 
             _context.Renderer.Pipeline.SetDepthMode(depthMode);
 
-            bool flipY = (state.Get<int>(MethodOffset.YControl) & 1) != 0;
-
+            bool flipY = (state.Get<YControl>(MethodOffset.YControl) & YControl.NegateY) != 0;
             float yFlip = flipY ? -1 : 1;
 
             Viewport[] viewports = new Viewport[Constants.TotalViewports];
@@ -508,6 +583,7 @@ namespace Ryujinx.Graphics.Gpu.Engine
                 vertexAttribs[index] = new VertexAttribDescriptor(
                     vertexAttrib.UnpackBufferIndex(),
                     vertexAttrib.UnpackOffset(),
+                    vertexAttrib.UnpackIsConstant(),
                     format);
             }
 
@@ -675,8 +751,9 @@ namespace Ryujinx.Graphics.Gpu.Engine
         private void UpdateBlendState(GpuState state)
         {
             bool blendIndependent = state.Get<Boolean32>(MethodOffset.BlendIndependent);
+            ColorF blendConstant = state.Get<ColorF>(MethodOffset.BlendConstant);
 
-            for (int index = 0; index < 8; index++)
+            for (int index = 0; index < Constants.TotalRenderTargets; index++)
             {
                 BlendDescriptor descriptor;
 
@@ -687,6 +764,7 @@ namespace Ryujinx.Graphics.Gpu.Engine
 
                     descriptor = new BlendDescriptor(
                         enable,
+                        blendConstant,
                         blend.ColorOp,
                         blend.ColorSrcFactor,
                         blend.ColorDstFactor,
@@ -701,6 +779,7 @@ namespace Ryujinx.Graphics.Gpu.Engine
 
                     descriptor = new BlendDescriptor(
                         enable,
+                        blendConstant,
                         blend.ColorOp,
                         blend.ColorSrcFactor,
                         blend.ColorDstFactor,
@@ -718,10 +797,12 @@ namespace Ryujinx.Graphics.Gpu.Engine
         /// </summary>
         private struct SbDescriptor
         {
+#pragma warning disable CS0649
             public uint AddressLow;
             public uint AddressHigh;
             public int  Size;
             public int  Padding;
+#pragma warning restore CS0649
 
             public ulong PackAddress()
             {

@@ -10,7 +10,7 @@ namespace ARMeilleure.State
         private const int IntSize   = 8;
         private const int VecSize   = 16;
         private const int FlagSize  = 4;
-        private const int ExtraSize = 4;
+        private const int ExtraSize = 8;
 
         private const int TotalSize = RegisterConsts.IntRegsCount * IntSize  +
                                       RegisterConsts.VecRegsCount * VecSize  +
@@ -67,8 +67,8 @@ namespace ARMeilleure.State
 
             int offset = RegisterConsts.IntRegsCount * IntSize + index * VecSize;
 
-            Marshal.WriteInt64(BasePtr, offset + 0, value.GetInt64(0));
-            Marshal.WriteInt64(BasePtr, offset + 8, value.GetInt64(1));
+            Marshal.WriteInt64(BasePtr, offset + 0, value.Extract<long>(0));
+            Marshal.WriteInt64(BasePtr, offset + 8, value.Extract<long>(1));
         }
 
         public bool GetPstateFlag(PState flag)
@@ -181,6 +181,14 @@ namespace ARMeilleure.State
                    RegisterConsts.VecRegsCount * VecSize  +
                    RegisterConsts.FlagsCount   * FlagSize +
                    RegisterConsts.FpFlagsCount * FlagSize;
+        }
+
+        public static int GetCallAddressOffset()
+        {
+            return RegisterConsts.IntRegsCount * IntSize  +
+                   RegisterConsts.VecRegsCount * VecSize  +
+                   RegisterConsts.FlagsCount   * FlagSize +
+                   RegisterConsts.FpFlagsCount * FlagSize + 4;
         }
 
         public void Dispose()

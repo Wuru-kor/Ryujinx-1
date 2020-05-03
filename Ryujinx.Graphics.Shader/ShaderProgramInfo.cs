@@ -11,6 +11,7 @@ namespace Ryujinx.Graphics.Shader
         public ReadOnlyCollection<TextureDescriptor> Textures { get; }
         public ReadOnlyCollection<TextureDescriptor> Images   { get; }
 
+
         public ReadOnlyCollection<InterpolationQualifier> InterpolationQualifiers { get; }
 
         public ShaderStage Stage { get; }
@@ -25,15 +26,28 @@ namespace Ryujinx.Graphics.Shader
             InterpolationQualifier[] interpolationQualifiers,
             ShaderStage              stage,
             bool                     usesInstanceId)
+
+        public bool UsesInstanceId { get; }
+
+        internal ShaderProgramInfo(
+            BufferDescriptor[]  cBuffers,
+            BufferDescriptor[]  sBuffers,
+            TextureDescriptor[] textures,
+            TextureDescriptor[] images,
+            bool                usesInstanceId)
+
         {
             CBuffers = Array.AsReadOnly(cBuffers);
             SBuffers = Array.AsReadOnly(sBuffers);
             Textures = Array.AsReadOnly(textures);
             Images   = Array.AsReadOnly(images);
 
+
             InterpolationQualifiers = Array.AsReadOnly(interpolationQualifiers);
 
             Stage = stage;
+
+
 
             UsesInstanceId = usesInstanceId;
         }
