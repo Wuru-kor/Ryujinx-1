@@ -11,6 +11,11 @@ namespace Ryujinx.Graphics.Gpu.Engine
     partial class Methods
     {
         /// <summary>
+        /// Meta data of the current compute shader.
+        /// </summary>
+        public ShaderMeta CurrentCpMeta { get; private set; }
+
+        /// <summary>
         /// Dispatches compute work.
         /// </summary>
         /// <param name="state">Current GPU state</param>
@@ -29,6 +34,7 @@ namespace Ryujinx.Graphics.Gpu.Engine
 
             int sharedMemorySize = Math.Min(qmd.SharedMemorySize, _context.Capabilities.MaximumComputeSharedMemorySize);
 
+<<<<<<< HEAD
             uint sbEnableMask = 0;
             uint ubEnableMask = 0;
 
@@ -49,12 +55,17 @@ namespace Ryujinx.Graphics.Gpu.Engine
 
             ComputeShader cs = ShaderCache.GetComputeShader(
                 state,
+=======
+            Shader.Shader cs = ShaderCache.GetComputeShader(
+>>>>>>> 8fb330a24a72c420175b2a1e35117134b782ca29
                 shaderGpuVa,
                 qmd.CtaThreadDimension0,
                 qmd.CtaThreadDimension1,
                 qmd.CtaThreadDimension2,
                 localMemorySize,
                 sharedMemorySize);
+
+            CurrentCpMeta = cs.Meta;
 
             _context.Renderer.Pipeline.SetProgram(cs.HostProgram);
 
@@ -68,7 +79,29 @@ namespace Ryujinx.Graphics.Gpu.Engine
 
             TextureManager.SetComputeTextureBufferIndex(state.Get<int>(MethodOffset.TextureBufferIndex));
 
+<<<<<<< HEAD
             ShaderProgramInfo info = cs.Shader.Program.Info;            
+=======
+            ShaderProgramInfo info = cs.Meta.Info[0];
+
+            uint sbEnableMask = 0;
+            uint ubEnableMask = 0;
+
+            for (int index = 0; index < Constants.TotalCpUniformBuffers; index++)
+            {
+                if (!qmd.ConstantBufferValid(index))
+                {
+                    continue;
+                }
+
+                ubEnableMask |= 1u << index;
+
+                ulong gpuVa = (uint)qmd.ConstantBufferAddrLower(index) | (ulong)qmd.ConstantBufferAddrUpper(index) << 32;
+                ulong size = (ulong)qmd.ConstantBufferSize(index);
+
+                BufferManager.SetComputeUniformBuffer(index, gpuVa, size);
+            }
+>>>>>>> 8fb330a24a72c420175b2a1e35117134b782ca29
 
             for (int index = 0; index < info.CBuffers.Count; index++)
             {

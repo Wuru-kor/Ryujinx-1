@@ -48,6 +48,11 @@ namespace Ryujinx.Graphics.OpenGL
             return new Program(shaders);
         }
 
+        public IProgram CreateProgramFromGpuBinary(ReadOnlySpan<byte> data)
+        {
+            return new Program(data);
+        }
+
         public ISampler CreateSampler(SamplerCreateInfo info)
         {
             return new Sampler(info);
