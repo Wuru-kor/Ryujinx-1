@@ -86,12 +86,12 @@ namespace Ryujinx.Graphics.Gpu.Shader
         /// <param name="localMemorySize">Local memory size of the compute shader</param>
         /// <param name="sharedMemorySize">Shared memory size of the compute shader</param>
         /// <returns>Compiled compute shader code</returns>
-<<<<<<< HEAD
+
         public ComputeShader GetComputeShader(
             GpuState state,
-=======
+
         public Shader GetComputeShader(
->>>>>>> 8fb330a24a72c420175b2a1e35117134b782ca29
+
             ulong gpuVa,
             int localSizeX,
             int localSizeY,
@@ -132,7 +132,7 @@ namespace Ryujinx.Graphics.Gpu.Shader
                 };
             }
 
-<<<<<<< HEAD
+
             CachedShader shader = TranslateComputeShader(
                 state,
                 gpuVa,
@@ -141,9 +141,9 @@ namespace Ryujinx.Graphics.Gpu.Shader
                 localSizeZ,
                 localMemorySize,
                 sharedMemorySize);
-=======
+
             TranslatorCallbacks callbacks = new TranslatorCallbacks(QueryInfo, PrintLog);
->>>>>>> 8fb330a24a72c420175b2a1e35117134b782ca29
+
 
             ShaderProgram program = Translator.Translate(code, callbacks, DefaultFlags | TranslationFlags.Compute);
 
@@ -200,7 +200,7 @@ namespace Ryujinx.Graphics.Gpu.Shader
                 pack.Add(GetShaderCode(addresses.TessEvaluation));
             }
 
-<<<<<<< HEAD
+
             gpShaders.Shaders[1] = TranslateGraphicsShader(state, ShaderStage.TessellationControl,    addresses.TessControl);
             gpShaders.Shaders[2] = TranslateGraphicsShader(state, ShaderStage.TessellationEvaluation, addresses.TessEvaluation);
             gpShaders.Shaders[3] = TranslateGraphicsShader(state, ShaderStage.Geometry,               addresses.Geometry);
@@ -209,9 +209,9 @@ namespace Ryujinx.Graphics.Gpu.Shader
             List<IShader> hostShaders = new List<IShader>();
 
             for (int stage = 0; stage < gpShaders.Shaders.Length; stage++)
-=======
+
             if (addresses.Geometry != 0)
->>>>>>> 8fb330a24a72c420175b2a1e35117134b782ca29
+
             {
                 pack.Add(GetShaderCode(addresses.Geometry));
             }
@@ -240,7 +240,7 @@ namespace Ryujinx.Graphics.Gpu.Shader
 
             IShader[] shaders = new IShader[programs.Count(x => x != null)];
 
-<<<<<<< HEAD
+
         /// <summary>
         /// Translates the binary Maxwell shader code to something that the host API accepts.
         /// </summary>
@@ -265,9 +265,8 @@ namespace Ryujinx.Graphics.Gpu.Shader
             {
                 return null;
             }
-=======
+
             int index = 0;
->>>>>>> 8fb330a24a72c420175b2a1e35117134b782ca29
 
             for (int stage = 0; stage < programs.Length; stage++)
             {
@@ -275,7 +274,7 @@ namespace Ryujinx.Graphics.Gpu.Shader
 
                 if (program != null)
                 {
-<<<<<<< HEAD
+
                     QueryInfoName.ComputeLocalSizeX
                         => localSizeX,
                     QueryInfoName.ComputeLocalSizeY
@@ -295,10 +294,9 @@ namespace Ryujinx.Graphics.Gpu.Shader
                     _
                         => QueryInfoCommon(info)
                 };
-=======
+
                     shaders[index++] = _context.Renderer.CompileShader(program);
                 }
->>>>>>> 8fb330a24a72c420175b2a1e35117134b782ca29
             }
 
             IProgram hostProgram = _context.Renderer.CreateProgram(shaders);
@@ -430,8 +428,8 @@ namespace Ryujinx.Graphics.Gpu.Shader
         }
 
         /// <summary>
-<<<<<<< HEAD
-=======
+
+
         /// Performs backwards propagation of interpolation qualifiers or later shader stages input,
         /// to ealier shader stages output.
         /// This is required by older versions of OpenGL (pre-4.3).
@@ -471,7 +469,7 @@ namespace Ryujinx.Graphics.Gpu.Shader
         }
 
         /// <summary>
->>>>>>> 8fb330a24a72c420175b2a1e35117134b782ca29
+
         /// Gets the primitive topology for the current draw.
         /// This is required by geometry shaders.
         /// </summary>

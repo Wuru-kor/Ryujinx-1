@@ -34,7 +34,7 @@ namespace Ryujinx.Graphics.Gpu.Engine
 
             int sharedMemorySize = Math.Min(qmd.SharedMemorySize, _context.Capabilities.MaximumComputeSharedMemorySize);
 
-<<<<<<< HEAD
+
             uint sbEnableMask = 0;
             uint ubEnableMask = 0;
 
@@ -55,9 +55,9 @@ namespace Ryujinx.Graphics.Gpu.Engine
 
             ComputeShader cs = ShaderCache.GetComputeShader(
                 state,
-=======
+
             Shader.Shader cs = ShaderCache.GetComputeShader(
->>>>>>> 8fb330a24a72c420175b2a1e35117134b782ca29
+
                 shaderGpuVa,
                 qmd.CtaThreadDimension0,
                 qmd.CtaThreadDimension1,
@@ -79,9 +79,9 @@ namespace Ryujinx.Graphics.Gpu.Engine
 
             TextureManager.SetComputeTextureBufferIndex(state.Get<int>(MethodOffset.TextureBufferIndex));
 
-<<<<<<< HEAD
+
             ShaderProgramInfo info = cs.Shader.Program.Info;            
-=======
+
             ShaderProgramInfo info = cs.Meta.Info[0];
 
             uint sbEnableMask = 0;
@@ -101,7 +101,7 @@ namespace Ryujinx.Graphics.Gpu.Engine
 
                 BufferManager.SetComputeUniformBuffer(index, gpuVa, size);
             }
->>>>>>> 8fb330a24a72c420175b2a1e35117134b782ca29
+
 
             for (int index = 0; index < info.CBuffers.Count; index++)
             {
